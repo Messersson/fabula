@@ -273,7 +273,10 @@ test('页面路由：列表/创建/工作台/导出 + CSRF 防线', async () => 
   assert.equal(workspace.status, 200);
   assert.match(workspace.text, /路由创建的申报书/);
   assert.match(workspace.text, /立项背景与意义/);
-  assert.match(workspace.text, /导出 Markdown/);
+  assert.match(workspace.text, /导出全文 Markdown/);
+  assert.match(workspace.text, /AI 共创/, '模式胶囊存在');
+  assert.match(workspace.text, /AI 全托管/, '模式胶囊存在');
+  assert.match(workspace.text, /整篇生成（全托管批量）/, '下拉菜单含整篇生成');
 
   // 手工保存小节。
   const saved = await post('/docs/section/save', {
