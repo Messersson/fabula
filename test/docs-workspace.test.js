@@ -326,6 +326,31 @@ test('技能广场页面：列表、新建、启停、导出', async () => {
   assert.equal(mis.listSkills().find((item) => item.id === skill.id), undefined);
 });
 
+test('技能勾选注入生成提示词，并持久化到项目', async () => {
+  const skill = mis.createSkill({
+    name: '竞品分析框架', description: '拆解竞争格局',
+    promptTemplate: '你是资深行业分析师，请用波特五力输出分析。', kind: 'method', usageMode: 'support',
+  });
+  const project = docEngine.createProject({
+    title: '技能注入测试', docType: 'report', mode: 'co', skillIds: [skill.id],
+  });
+  assert.deepEqual(project.skillIds, [skill.id], '创建时绑定的技能要存进项目');
+
+  const seen = [];
+  stubModel((options) => {
+    seen.push(options.messages.map((message) => String(message.content || '')).join('\n'));
+    return longText(1, 500);
+  });
+  await docEngine.draftSection(project.id, 1);
+  assert.match(seen[0], /【叠加技能：竞品分析框架】/, '起草提示词必须注入勾选的技能模板');
+  assert.match(seen[0], /波特五力/);
+
+  // 解绑后不再注入。
+  docEngine.setProjectSkills(project.id, []);
+  await docEngine.reviseSection(project.id, 1, '语气更克制');
+  assert.ok(!seen[1].includes('【叠加技能'), '解绑后不得再注入');
+});
+
 test('状态页兼容文档任务：标题、进度单位与续跑入口', async () => {
   const statusPage = require('../lib/status-page');
   const project = docEngine.createProject({ title: '状态页可见的文档', docType: 'bp', mode: 'auto' });
