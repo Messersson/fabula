@@ -3,8 +3,10 @@ services:
     build: .
     container_name: fabula
     restart: unless-stopped
-    # host 网络：容器共享宿主机网络栈（clash TUN 接管出网，书源抓取可达；17381 直接绑定宿主机）
-    network_mode: host
+    # 端口映射发布到本机回环（Linux 服务器如需 host 网络可改回 network_mode: host；
+    # Docker Desktop for Windows 的 host 网络不通宿主回环，必须用 ports 发布）。
+    ports:
+      - "127.0.0.1:17381:17381"
     volumes:
       # 数据持久化：数据库、书稿、书源、提示词、config.json 都在这里
       - ./data:/app/data
@@ -13,6 +15,8 @@ services:
       - BIND=0.0.0.0
       - PORT=17381
       - FABULA_DB_PATH=/app/runtime/writerx.db
+      # SQLite 日志用回滚模式：运行库虽在 Docker 卷内，稳妥优先
+      - FABULA_SQLITE_JOURNAL=DELETE
       - FABULA_IPC_TOKEN=${FABULA_IPC_TOKEN:?set FABULA_IPC_TOKEN before exposing Fabula}
 
 volumes:
