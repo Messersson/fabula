@@ -330,11 +330,14 @@ test('技能勾选注入生成提示词，并持久化到项目', async () => {
   const skill = mis.createSkill({
     name: '竞品分析框架', description: '拆解竞争格局',
     promptTemplate: '你是资深行业分析师，请用波特五力输出分析。', kind: 'method', usageMode: 'support',
+    domain: 'doc',
   });
+  // 域隔离：novel 域技能不得绑进文档项目。
+  const novelSkill = mis.createSkill({ name: '小说技能', description: 'x', promptTemplate: 'y', kind: 'method', domain: 'novel' });
   const project = docEngine.createProject({
-    title: '技能注入测试', docType: 'report', mode: 'co', skillIds: [skill.id],
+    title: '技能注入测试', docType: 'report', mode: 'co', skillIds: [skill.id, novelSkill.id],
   });
-  assert.deepEqual(project.skillIds, [skill.id], '创建时绑定的技能要存进项目');
+  assert.deepEqual(project.skillIds, [skill.id], '跨域的 novel 技能被过滤，doc 技能保留');
 
   const seen = [];
   stubModel((options) => {
