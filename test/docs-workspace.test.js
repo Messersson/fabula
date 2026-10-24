@@ -351,6 +351,20 @@ test('技能勾选注入生成提示词，并持久化到项目', async () => {
   assert.ok(!seen[1].includes('【叠加技能'), '解绑后不得再注入');
 });
 
+test('技能域隔离：文档工作台只勾选 doc 域技能，小说技能不可见', async () => {
+  const novelSkill = mis.createSkill({ name: '小说专属技能', description: '小说用', promptTemplate: '小说提示', kind: 'method', domain: 'novel' });
+  const docSkill = mis.createSkill({ name: '文档专属技能', description: '文档用', promptTemplate: '文档提示', kind: 'method', domain: 'doc' });
+
+  // 默认（不传 domain）= 小说域。
+  assert.equal(mis.createSkill({ name: '默认域技能', description: 'x', promptTemplate: 'y' }).domain, 'novel');
+
+  const project = docEngine.createProject({ title: '域隔离文档', docType: 'report', mode: 'co' });
+  const workspace = docsPage.renderProjectPage(project.id, { csrf: 't' });
+  // 文档技能在勾选菜单里可见；小说技能不可见。
+  assert.match(workspace, /文档专属技能/, 'doc 域技能必须出现在文档工作台');
+  assert.ok(!workspace.includes('小说专属技能'), 'novel 域技能不得混入文档工作台');
+});
+
 test('状态页兼容文档任务：标题、进度单位与续跑入口', async () => {
   const statusPage = require('../lib/status-page');
   const project = docEngine.createProject({ title: '状态页可见的文档', docType: 'bp', mode: 'auto' });
