@@ -268,12 +268,12 @@ test('页面路由：列表/创建/工作台/导出 + CSRF 防线', async () => 
     brief: '数字化改造项目', template: '',
   });
   assert.equal(created.status, 303);
-  const projectId = created.location.split('/').pop();
+  const projectId = new URL(created.location, 'http://x').searchParams.get('id');
   const workspace = await get(created.location);
   assert.equal(workspace.status, 200);
   assert.match(workspace.text, /路由创建的申报书/);
   assert.match(workspace.text, /立项背景与意义/);
-  assert.match(workspace.text, /导出全文 Markdown/);
+  assert.match(workspace.text, /导出 Markdown/);
 
   // 手工保存小节。
   const saved = await post('/docs/section/save', {
