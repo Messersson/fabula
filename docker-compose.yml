@@ -5,8 +5,9 @@ services:
     restart: unless-stopped
     # 端口映射发布到本机回环（Linux 服务器如需 host 网络可改回 network_mode: host；
     # Docker Desktop for Windows 的 host 网络不通宿主回环，必须用 ports 发布）。
+    # 宿主端口由 .env 的 FABULA_PORT 控制（默认 17382），容器内固定 17381。
     ports:
-      - "127.0.0.1:17381:17381"
+      - "127.0.0.1:${FABULA_PORT:-17382}:17381"
     volumes:
       # 数据持久化：数据库、书稿、书源、提示词、config.json 都在这里
       - ./data:/app/data
