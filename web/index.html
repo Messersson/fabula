@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><style id="__WX_CLEAN__">
+/* 离线复刻版清理：官方欢迎/更新弹窗、账号条一律不显示 */
+.notice-mask{display:none !important}
+.notice{display:none !important}
+[class*="userbar"],button.mdrawer__user{display:none !important}
+button.set__navitem[data-wx-account],button.set__navitem[data-wx-hide]{display:none !important}
+
+/* 删除官方痕迹：云同步按钮 / VIP·会员徽章 / 反馈群 / 关于页的更新器与官方手册入口 */
+[title="云同步（手动上传 / 拉取）"]{display:none !important}
+.userbar__vip,.userbar__free{display:none !important}
+[class*="set-feedback__"]{display:none !important}
+[class*="set-about__upd"],[class*="set-about"] .set-actions,.set-updchan,[class*="set-about"] .set-btn{display:none !important}
+
+/* 删除技能广场顶部选项卡整排（在线广场+我的），保留技能列表 */
+.plaza-viewtabs{display:none !important}
+/* 删除内置免费模型区块（含标题「内置免费/经 Hub 安全转发」）与会员专供区块 */
+.chmgr__section:has(.chcard--builtin){display:none !important}
+.chmgr__section:has(.chcard--premium){display:none !important}
+.dock__disclaimer{display:none !important}
+.header__tag{display:none !important}
+.chcard--builtin{display:none !important}
+.chcard--premium{display:none !important}
+/* ===== H5 紧凑模式（≤720px：顶栏/聊天头/输入坞/编辑器顶栏全面压缩，功能不减） ===== */
+@media (max-width:720px){
+  .mshell__top{height:40px !important}
+  .header{height:40px !important}
+  .header__tag{display:none !important}
+  .chathead{height:42px !important;padding:0 10px !important;gap:8px !important}
+  .chathead__tools{gap:5px !important}
+  .chathead__toolbtn{height:28px !important;padding:0 8px !important;font-size:12px !important;gap:4px !important}
+  .chathead__msgcount{display:none !important}
+  .aimsg{gap:10px !important}
+  .usermsg__bubble{padding:8px 12px !important}
+  .dockwrap{padding:0 8px calc(6px + env(safe-area-inset-bottom,0px)) !important}
+  .dock__compose{padding:8px 10px 4px !important;font-size:14px !important;line-height:1.6 !important}
+  .dock__textarea{max-height:38vh !important}
+  .dock__refs{top:8px !important;left:10px !important}
+  .dock__toolbar{padding:4px 8px 6px !important;gap:5px !important}
+  .dock__tool,.dock__skill,.dock__file,.dock__web-search,.dock__next,.dock__model,.dock__reasoning{height:28px !important;padding:0 8px !important;font-size:12px !important}
+  .dock__send{flex:0 0 28px !important;width:28px !important;height:28px !important}
+  .dock__disclaimer{display:none !important}
+  .dock__batchhint{padding:6px 8px !important;font-size:11px !important}
+  .dock__quota{margin-left:4px !important;font-size:10px !important}
+  .dock__model{max-width:150px !important}
+  /* 编辑器顶栏（文件名 + 续写/逐场撰写/写这章正文） */
+  .editorpane__bar{min-height:42px !important;padding:5px 8px !important;gap:6px 8px !important}
+  .editorpane__ai{height:28px !important;padding:0 8px !important;font-size:12px !important}
+  /* 工具弹层/面板 */
+  .mtool__scroll{padding:8px 10px 10px !important;gap:8px !important}
+  .modal__sub{font-size:12.5px !important}
+  /* ===== 手机阅读字号（正文 17px，消息/输入/抽屉同步放大） ===== */
+  :root{--fs-body:17px !important;
+    --font-ui:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif !important;
+    --font-prose:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif !important}
+  .aimsg__body{font-size:17px !important}
+  .aimsg__prose{font-size:17px !important;line-height:1.78 !important}
+  .aimsg__prose h1{font-size:21px !important}
+  .aimsg__prose h2{font-size:19px !important}
+  .aimsg__prose h3{font-size:17.5px !important}
+  .aimsg__prose h4{font-size:16.5px !important}
+  .aimsg__prose table{font-size:15px !important}
+  .aimsg__prose pre code{font-size:14px !important}
+  .usermsg__text{font-size:17px !important}
+  .usermsg__bubble{font-size:17px !important}
+  .mdock__input{font-size:17px !important}
+  .dock__textarea{font-size:17px !important}
+  .dock__compose{font-size:17px !important}
+  .mdrawer__row{font-size:16.5px !important}
+  .chathead__title{font-size:17px !important}
+  .mshell__title{font-size:17px !important}
+}
+</style>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover：安全区变量可用；user-scalable=no：输入聚焦不触发自动缩放
+         （写作场景灾难）；interactive-widget=resizes-content：键盘弹起压缩布局而非遮盖 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content"
+    />
+    <title>Fabula · 写作工作台</title>
+    <script type="module" crossorigin src="/assets/index-CS9FKb-w.js"></script>
+    <script defer src="/assets/fabula-auto-models.js"></script>
+    <script defer src="/assets/fabula-longform.js"></script>
+    <script defer src="/assets/fabula-planning.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/markdown-J2sUsuIq.js">
+    <link rel="modulepreload" crossorigin href="/assets/tiptap-XQaJW6i5.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-CQ40Vlvh.css">
+  </head>
+
+  <body>
+    <!-- 启动占位（B1）：WebView 解析 JS 期间的白屏遮盖——纯内联零依赖，
+         挂在 #root 外（React 19 不接管非空容器），App 首帧后由 main.tsx 移除。
+         视觉与应用同主题：品牌蓝 logo 方块 + 字标 + 三点脉动（深浅两态）。 -->
+    <style>
+      #mz-boot { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 16px; background: #f7f6f3; }
+      #mz-boot .bl { width: 58px; height: 58px; border-radius: 15px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.28);
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; font: 800 30px/1 system-ui, sans-serif; letter-spacing: -1px; }
+      #mz-boot b { font: 600 19px/1 system-ui, sans-serif; color: #2c2a26; letter-spacing: 3px; }
+      #mz-boot .dots { display: flex; gap: 6px; margin-top: 2px; }
+      #mz-boot .dots i { width: 6px; height: 6px; border-radius: 50%; background: #2563eb;
+        opacity: 0.25; animation: mzdot 1.2s ease-in-out infinite; }
+      #mz-boot .dots i:nth-child(2) { animation-delay: 0.15s; }
+      #mz-boot .dots i:nth-child(3) { animation-delay: 0.3s; }
+      @keyframes mzdot { 0%, 100% { opacity: 0.25; transform: translateY(0); }
+        40% { opacity: 1; transform: translateY(-3px); } }
+      @media (prefers-color-scheme: dark) {
+        #mz-boot { background: #1c1b19; }
+        #mz-boot b { color: #d8d4cc; }
+        #mz-boot .dots i { background: #60a5fa; }
+      }
+    </style>
+    <div id="mz-boot">
+      <div class="bl">F</div>
+      <b>Fabula</b>
+      <div class="dots"><i></i><i></i><i></i></div>
+    </div>
+    <div id="root"></div>
+
+  </body>
+</html>

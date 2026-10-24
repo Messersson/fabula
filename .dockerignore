@@ -1,0 +1,18 @@
+# Docker 构建忽略（镜像只应包含源码和前端构建产物）
+.git
+.gitignore
+.dockerignore
+node_modules
+config.json
+.env
+.env.*
+data/
+output/
+ppt_work/
+scripts/
+test/
+*.db
+*.db-wal
+*.db-shm
+*.log
+*.zip

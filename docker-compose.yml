@@ -1,0 +1,19 @@
+services:
+  fabula:
+    build: .
+    container_name: fabula
+    restart: unless-stopped
+    # host 网络：容器共享宿主机网络栈（clash TUN 接管出网，书源抓取可达；17381 直接绑定宿主机）
+    network_mode: host
+    volumes:
+      # 数据持久化：数据库、书稿、书源、提示词、config.json 都在这里
+      - ./data:/app/data
+      - fabula_runtime:/app/runtime
+    environment:
+      - BIND=0.0.0.0
+      - PORT=17381
+      - FABULA_DB_PATH=/app/runtime/writerx.db
+      - FABULA_IPC_TOKEN=${FABULA_IPC_TOKEN:?set FABULA_IPC_TOKEN before exposing Fabula}
+
+volumes:
+  fabula_runtime:

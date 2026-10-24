@@ -1,0 +1,14 @@
+# 运行时数据与个人内容不入库
+data/
+output/
+ppt_work/
+
+# 本机配置与日志（config.example.json 是模板，真正的 key 在 config.json）
+config.json
+server.log
+*.log
+
+node_modules/
+.DS_Store
+Thumbs.db
+.playwright-cli/
