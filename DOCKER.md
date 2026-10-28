@@ -76,7 +76,8 @@ docker run -d --name fabula \
 4. **Sub2api 在容器内访问**：如果模型源也在这个 NAS（如 sub2api 3003），容器内直连内网 IP 即可；若想用容器名互访，把两服务加入同一 compose 网络并改用 `http://sub2api:3003/v1`。
 5. **书源抓书**：`search_books` / `fetch_chapter_texts` 走公网 shukuge，需 NAS 能出网；若 NAS 有代理，可在容器环境变量里加 `HTTPS_PROXY`/`HTTP_PROXY`（Node 的 fetch 默认尊重并从 env 读取这两个变量）。
 6. **备份**：日常只备份 `data/` 目录（可停机后用 `sqlite3 .backup` 或直接 `cp`，WAL 模式建议先 `PRAGMA wal_checkpoint(TRUNCATE)` 或直接停容器再拷）。
-7. **非 root 与探活**：镜像以非 root 的 `node` 用户运行，只对 `/app/data`、`/app/runtime` 有写权限；内置 `HEALTHCHECK` 每 30 秒请求 `/healthz`，`docker ps` 可直接看到健康状态。
+7. **非 root 与探活**：镜像以非 root 的 `node` 用户（UID 1000）运行，只对 `/app/data`、`/app/runtime` 有写权限；内置 `HEALTHCHECK` 每 30 秒请求 `/healthz`，`docker ps` 可直接看到健康状态。
+   - 挂载宿主机 `data/` 时，请确认宿主机目录允许 UID 1000 写入：`sudo chown -R 1000:1000 /vol1/docker/fabula/data`。命名卷由 Docker 按镜像目录属主初始化，无需处理。
 8. **优雅停机**：收到 `SIGTERM` 后服务先停接新连接，等在飞请求与生成任务到安全边界（默认 10 秒）再关库。`docker stop` 默认 10 秒就到点强杀，所以 compose 已设 `stop_grace_period: 20s`；手工 `docker run` 请加 `--stop-timeout 20`。
 9. **重启后续跑**：上次退出时没跑完的任务会在下次启动时标成「进程中断」，状态页保留断点与 token 账目，点「从断点续跑」即可；不会出现状态永远停在「运行中」的僵尸任务。
 10. **迁移快照**：数据库 schema 升级前自动用 `VACUUM INTO` 在运行库同目录生成 `writerx.backup-v<版本>-<时间戳>.db`（保留最近 5 份）；快照失败则拒绝启动，避免升到一半留下半套表。
