@@ -23,3 +23,35 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Run tests
         run: node --test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t fabula:ci .
+      - name: Start container
+        run: |
+          docker run -d --name fabula-ci -p 17381:17381 \
+            -e FABULA_ACCESS_TOKEN=ci-token \
+            -e FABULA_IPC_TOKEN=ci-ipc \
+            -e FABULA_SQLITE_JOURNAL=DELETE \
+            fabula:ci
+      - name: Wait for healthz
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:17381/healthz; then exit 0; fi
+            sleep 1
+          done
+          echo "容器未在 40 秒内就绪"; docker logs fabula-ci; exit 1
+      - name: Access gate inside container
+        run: |
+          # 容器内来源是网桥地址，未带口令必须 401，不能泄出页面
+          code=$(curl -s -o /tmp/unauth.html -w '%{http_code}' http://127.0.0.1:17381/)
+          test "$code" = "401" || { echo "期望 401，实际 $code"; exit 1; }
+          # 带口令应种 Cookie 并 303 去掉查询参数
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:17381/?access=ci-token")
+          test "$code" = "303" || { echo "期望 303，实际 $code"; exit 1; }
+      - name: Stop container
+        if: always()
+        run: docker rm -f fabula-ci || true

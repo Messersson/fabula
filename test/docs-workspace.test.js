@@ -4260,3 +4260,24 @@ test('上下文：一节有两个主题时，少数派主题不会被挤出候�
   assert.match(evidence, /精密机床领域 2025 年关键设备进口占比 \d+%/, '论点主题要有证据');
   assert.match(evidence, /半导体材料领域 2025 年关键设备进口占比 \d+%/, '必答问题的主题也要有证据');
 });
+
+test('全托管：手动停止在下一节边界生效，已完成小节保留', async () => {
+  const project = docEngine.createProject({
+    title: '取消测试', docType: 'report', mode: 'auto',
+    template: '# 摘要\n概括。\n\n# 背景与调研方法\n方法。\n\n# 现状分析\n现状。\n\n# 结论\n结论。',
+  });
+  let calls = 0;
+  stubModel(() => {
+    calls += 1;
+    // 第 1 节起草时请求停止：本节照常落盘，下一节开始前停下。
+    if (calls === 1) docEngine.cancelDocRun({ projectId: project.id });
+    return longText(calls, 600);
+  });
+  const result = await docEngine.generateDocProject({ projectId: project.id, maxRetries: 1, retryBaseDelayMs: 1 });
+  restoreModel();
+
+  assert.equal(result.runStatus, 'cancelled');
+  assert.deepEqual(result.created, [1], '仅完成请求停止前正在写的那一节');
+  assert.equal(orch.getRun(result.runId).status, 'cancelled');
+  assert.equal(docEngine.getProject(project.id).status, 'cancelled');
+});

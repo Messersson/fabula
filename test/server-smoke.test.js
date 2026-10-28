@@ -93,6 +93,15 @@ test('五个页面在干净数据目录下都能打开', async () => {
   }
 });
 
+test('健康检查端点可用于容器探活', async () => {
+  const response = await fetch(baseUrl + '/healthz');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.db, true);
+  assert.ok(body.uptime >= 0);
+});
+
 test('干净启动后官方技能已经播种', async () => {
   const response = await fetch(baseUrl + '/skills');
   const html = await response.text();

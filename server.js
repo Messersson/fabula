@@ -9,8 +9,11 @@ const dbmod = require('./lib/db');
 const DATA_DIR_VISIBLE = () => dbmod.DATA_DIR;
 const glue = require('./lib/glue');
 const registry = require('./lib/registry');
+const accessGate = require('./lib/access-gate');
 
 const PORT = Number(process.env.PORT || process.argv[2] || 17381);
+const BIND = process.env.BIND || '127.0.0.1';
+const ACCESS = accessGate.resolveAccess({ bind: BIND, envToken: process.env.FABULA_ACCESS_TOKEN });
 const ROOT = __dirname;
 const WEB = path.join(ROOT, 'web');
 const IPC_TOKEN = crypto.randomBytes(32).toString('hex');
@@ -93,6 +96,16 @@ function applyConfig() {
   run(`INSERT INTO settings(key,value) VALUES('replica_config_hash',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, h);
 }
 applyConfig();
+
+// 上一个进程如果被 kill/断电，running 会永远停在 running；启动时先收尸，再开始服务。
+try {
+  const recovered = require('./lib/recovery').recoverOrphanedRuns();
+  if (recovered.runs || recovered.projects || recovered.rounds) {
+    console.log(`[recovery] 已恢复上次中断的任务：生成 ${recovered.runs}、文档项目 ${recovered.projects}、评审 ${recovered.rounds}`);
+  }
+} catch (error) {
+  console.error('[recovery] 孤儿任务恢复失败:', error && error.message);
+}
 
 // ---------- MIME ----------
 const MIME = {
@@ -265,8 +278,50 @@ async function handleStatusResume(req, res) {
   res.end();
 }
 
+const STARTED_AT = Date.now();
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://localhost');
+  // 非回环访客先过访问门禁：口令有效才继续，否则连静态页和 IPC token 都拿不到。
+  if (ACCESS.token && u.pathname !== '/healthz'
+    && !accessGate.isLoopback(req.socket.remoteAddress)) {
+    const queryToken = req.method === 'GET' ? String(u.searchParams.get('access') || '') : '';
+    const supplied = queryToken || accessGate.tokenFromRequest(req);
+    if (!accessGate.safeEqual(supplied, ACCESS.token)) {
+      res.writeHead(401, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer',
+      });
+      res.end(accessGate.renderLogin({ failed: !!queryToken }));
+      return;
+    }
+    if (queryToken) {
+      // 口令进 URL 只用于换取会话；立刻 303 把它从地址栏和后续请求里去掉。
+      u.searchParams.delete('access');
+      const qs = u.searchParams.toString();
+      res.writeHead(303, {
+        Location: u.pathname + (qs ? '?' + qs : ''),
+        'Set-Cookie': `${accessGate.COOKIE_NAME}=${encodeURIComponent(ACCESS.token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end();
+      return;
+    }
+  }
+  if (req.method === 'GET' && u.pathname === '/healthz') {
+    let dbOk = true;
+    try { dbOk = !!(one('SELECT 1 AS ok') || {}).ok; } catch (e) { dbOk = false; }
+    res.writeHead(dbOk ? 200 : 503, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(JSON.stringify({ ok: dbOk, uptime: Math.floor((Date.now() - STARTED_AT) / 1000), db: dbOk }));
+    return;
+  }
   const origin = req.headers.origin;
   if (origin) {
     try {
@@ -356,7 +411,6 @@ function purgeBuiltin() {
 }
 purgeBuiltin();
 
-const BIND = process.env.BIND || '127.0.0.1';
 server.listen(PORT, BIND, () => {
   const cfg = require('./lib/llm').activeChannel();
   console.log('┌──────────────────────────────────────────────────┐');
@@ -364,4 +418,44 @@ server.listen(PORT, BIND, () => {
   console.log(`│ 打开: http://${BIND}:${PORT}                   │`);
   console.log(`│ 当前渠道: ${(cfg && (cfg.label || cfg.id)) || '（未配置，请在设置→渠道管理添加）'} `);
   console.log('└──────────────────────────────────────────────────┘');
+  if (ACCESS.token) {
+    const source = ACCESS.source === 'env' ? '环境变量 FABULA_ACCESS_TOKEN' : '本次启动自动生成（重启会变）';
+    console.log(`[access] 非本机访客需要访问口令（来源：${source}）`);
+    if (ACCESS.source === 'generated') console.log(`[access] 口令：${ACCESS.token}`);
+    console.log(`[access] 首次访问 http://<本机IP>:${PORT}/?access=<口令>，之后走 HttpOnly cookie；127.0.0.1 免密。`);
+  }
 });
+
+// ---------- 优雅退出 ----------
+// 生成/评审是后台长任务，不等 HTTP 连接结束就关库可能写到一半。
+// 这里先停止接新请求，给在跑任务一个窗口；没跑完的由下次启动的孤儿恢复接手。
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const graceMs = Math.max(1000, Number(process.env.FABULA_SHUTDOWN_GRACE_MS || 10000));
+  const active = Number((one(`SELECT COUNT(*) AS n FROM generation_runs WHERE status IN ('running','retrying')`) || {}).n || 0);
+  console.log(`[shutdown] 收到 ${signal}，停止接收新请求${active ? `；仍有 ${active} 个生成任务在跑，最多等待 ${graceMs}ms` : ''}…`);
+  let finished = false;
+  let timer = null;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (timer) clearTimeout(timer);
+    try {
+      dbmod.close();
+      console.log('[shutdown] 数据库已关闭');
+    } catch (error) {
+      console.error('[shutdown] 关闭数据库失败:', error && error.message);
+    }
+    process.exit(0);
+  };
+  timer = setTimeout(() => {
+    console.log('[shutdown] 等待超时，强制退出（未完成任务下次启动会标记为可续跑）');
+    try { server.closeAllConnections(); } catch (error) { /* 老 Node 没有这个 API */ }
+    finish();
+  }, graceMs);
+  server.close(() => { if (!active) finish(); });
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -6,6 +6,7 @@
     "node": ">=22.5"
   },
   "scripts": {
+    "start": "node server.js",
     "test": "node --test"
   }
 }

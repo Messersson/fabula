@@ -11,7 +11,9 @@ COPY lib /app/lib
 COPY web /app/web
 COPY resources /app/resources
 COPY scripts/seed-doc-skills.cjs /app/scripts/seed-doc-skills.cjs
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh \
+ && mkdir -p /app/runtime /app/data \
+ && chown -R node:node /app/runtime /app/data
 
 # 运行时目录与端口
 ENV NODE_ENV=production \
@@ -23,6 +25,12 @@ EXPOSE 17381
 
 # 数据可持久化挂载: -v /path/to/data:/app/data
 VOLUME ["/app/data", "/app/runtime"]
+
+# 非 root 运行：即使容器被突破，也只能动这两个可写目录。
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||17381)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

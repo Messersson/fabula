@@ -3,6 +3,8 @@ services:
     build: .
     container_name: fabula
     restart: unless-stopped
+    # 服务的优雅退出宽限是 10s，给 docker stop 留出余量，避免到点被 SIGKILL
+    stop_grace_period: 20s
     # 端口映射发布到本机回环（Linux 服务器如需 host 网络可改回 network_mode: host；
     # Docker Desktop for Windows 的 host 网络不通宿主回环，必须用 ports 发布）。
     # 宿主端口由 .env 的 FABULA_PORT 控制（默认 17382），容器内固定 17381。
@@ -19,6 +21,9 @@ services:
       # SQLite 日志用回滚模式：运行库虽在 Docker 卷内，稳妥优先
       - FABULA_SQLITE_JOURNAL=DELETE
       - FABULA_IPC_TOKEN=${FABULA_IPC_TOKEN:?set FABULA_IPC_TOKEN before exposing Fabula}
+      # 容器内看到的来源是网桥地址而不是回环，因此必须带访问口令。
+      # 这里留空则由服务启动时随机生成，启动日志会打印带口令的地址。
+      - FABULA_ACCESS_TOKEN=${FABULA_ACCESS_TOKEN:-}
 
 volumes:
   fabula_runtime:

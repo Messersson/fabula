@@ -1705,3 +1705,81 @@ test('争议回抛：复评仍平票时退回组长裁决', async () => {
   assert.match(conflict.instruction, /补一段因果链/);
   review.deletePanel(panel.id);
 });
+
+// ---------- 成本与容错 ----------
+
+test('评审预算：每轮按人数切分 maxTokens，预算过低当场拒绝', async () => {
+  const project = makeDoc('这一节只有结论没有论证。设备国产化率偏低是主要约束。');
+  const panel = review.savePanel({
+    name: '预算团', workbench: 'doc',
+    tokenBudget: 2400,
+    reviewers: [
+      { name: '甲', channelId: 'ch_a', persona: '学术审稿人' },
+      { name: '乙', channelId: 'ch_b', persona: '逻辑专家' },
+      { name: '丙', channelId: 'ch_c', persona: '规范审查员' },
+    ],
+  });
+  const reviewerTokens = [];
+  stubModel((options) => {
+    const sys = String(options.messages?.[0]?.content || '');
+    if (sys.includes('【角色人设】')) reviewerTokens.push(options.maxTokens);
+    return JSON.stringify({
+      score: 72, grade: 'B', summary: '可用。',
+      highlights: [{ text: '结论明确', why: '有判断句' }],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  const result = await review.runRound({ workbench: 'doc', workId: project.id, sectionIdx: 1, panelId: panel.id });
+  restoreModel();
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(reviewerTokens, [800, 800, 800], '2400 / 3 位评审员 = 每人 800');
+  assert.equal(result.report.scores.length, 3);
+
+  const tooSmall = review.savePanel({
+    name: '预算过小团', workbench: 'doc', tokenBudget: 300,
+    reviewers: [{ name: '甲', channelId: 'ch_a' }, { name: '乙', channelId: 'ch_b' }],
+  });
+  await assert.rejects(
+    () => review.runRound({ workbench: 'doc', workId: project.id, sectionIdx: 1, panelId: tooSmall.id }),
+    /预算 300 tokens 太低/,
+  );
+  review.deletePanel(tooSmall.id);
+  review.deletePanel(panel.id);
+});
+
+test('评审容错：连接类失败重试一次后继续出报告', async () => {
+  const project = makeDoc('这一节只有结论没有论证。设备国产化率偏低是主要约束。');
+  const panel = review.savePanel({
+    name: '重试团', workbench: 'doc',
+    reviewers: [
+      { name: '甲', channelId: 'ch_a', persona: '学术审稿人' },
+      { name: '乙', channelId: 'ch_b', persona: '逻辑专家' },
+      { name: '丙', channelId: 'ch_c', persona: '规范审查员' },
+    ],
+  });
+  let reviewerCalls = 0;
+  let failTimes = 3;
+  stubModel((options) => {
+    const sys = String(options.messages?.[0]?.content || '');
+    if (sys.includes('【角色人设】')) {
+      reviewerCalls += 1;
+      if (failTimes > 0) {
+        failTimes -= 1;
+        throw new Error('fetch failed');
+      }
+    }
+    return JSON.stringify({
+      score: 76, grade: 'B', summary: '可用。',
+      highlights: [{ text: '结论明确', why: '有判断句' }],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  const result = await review.runRound({ workbench: 'doc', workId: project.id, sectionIdx: 1, panelId: panel.id });
+  restoreModel();
+
+  assert.equal(result.ok, true);
+  assert.equal(reviewerCalls, 6, '3 位评审员各失败一次、各重试一次');
+  assert.equal(result.report.scores.length, 3);
+  review.deletePanel(panel.id);
+});

@@ -39,7 +39,7 @@
 | 长任务执行 | 进程内 `setImmediate` 启动，`inflight` 是**内存 Set** | `lib/status-page.js:204-217` |
 | 任务状态 | 落库 `generation_runs` / `chapter_runs` / `generation_attempts`，可续跑 | `lib/longform-orchestrator.js` |
 | 模型接入 | 写作走 `activeChannel()`（单一激活渠道）；评审按每位评审员的 `channelId` 显式传参 | `lib/llm.js:95-112`、`lib/review-engine.js` |
-| 鉴权 | 进程启动随机 token，Cookie + Header 双校验 | `server.js:16,159-161` |
+| 鉴权 | 回环免口令；非回环绑定时强制访问口令（`FABULA_ACCESS_TOKEN` 或启动随机生成），`?access=` 一次性换 HttpOnly Cookie，也接受 `X-Fabula-Access` 头 | `lib/access-gate.js`、`server.js:16,285` |
 | 页面渲染 | 字符串模板 SSR，`docs-page.js` 3035 行、`review-page.js` 928 行 | `lib/docs-page.js`、`lib/review-page.js` |
 | 规模 | 最大模块 `doc-engine.js` 3688 行 | `wc -l` |
 
@@ -60,6 +60,8 @@
 - 无法单独扩缩容：想多跑任务就得多开页面服务。
 
 **这不是"以后再说"的问题**——它是当前架构里唯一一个「一次误操作就丢半小时工作」的地方。
+
+**已缓解（2026-10）**：启动时把遗留的 `running/retrying` 标为 `interrupted`（可续跑），`SIGTERM/SIGINT` 走优雅退出（停接新连接 → 等在飞任务到边界 → 关库）；「状态永远卡在 running」和「停容器硬切 SQLite」两条已经堵上。真正把执行体移出 HTTP 进程（jobs 表 + worker）仍列在迁移路径第 1 步。
 
 ### ② SQLite 同步 API 阻塞事件循环 —— 第二个炸
 
@@ -296,9 +298,9 @@ SkillManifest {
 | P2-1 `review` 域（评审员档案、评审团配置、轮次、交叉验证） | **已完成**。3 位评审员并行独立评审、交叉验证、平票复投/仲裁、暂停/续跑、决策落库；`test/review.test.js` 47 条 |
 | P2-2 `skill` 域（SkillManifest、库归属、组合校验） | **已完成**。三类 Skill、共享/按评审员绑定、冲突提示、启停与编辑；版本回滚尚未做 |
 | P2-3 蒸馏流水线（样本 → 特征 → 抽象 → Skill → 入库校验） | **已完成**。优劣甄别为硬性门槛，重复度 ≥0.72 拒绝入库 |
-| P2-4 评审成本护栏 | **部分完成**。每次调用 token 已落库、可按轮次查看；硬预算门禁尚未做 |
+| P2-4 评审成本护栏 | **已完成**。每次调用 token 落库、可按轮次查看；评审团可设每轮硬上限，按人数切分单次 `maxTokens`，低于「人数 × 600」拒绝开跑；连接类失败重试一次，预算模式下不重试解析失败（那次调用已花满 token） |
 
-**剩余**：`works` 统一作品抽象（见 ADR-4）、Skill 版本回滚、单轮 token 上限与超限暂停。
+**剩余**：`works` 统一作品抽象（见 ADR-4）、Skill 版本回滚。
 
 **不做**：不做评审员之间的自动辩论（成本高、收益未验证）。
 
@@ -327,6 +329,19 @@ SkillManifest {
 
 **三个必须有的告警**：任务租约反复超时（worker 卡死）、`SQLITE_BUSY` 突增（写并发到顶）、单任务 token 超预算 3 倍（提示词退化或死循环）。
 
+### 单机运行保障（2026-10 已落地）
+
+| 能力 | 行为 | 位置 |
+|---|---|---|
+| 探活 | `GET /healthz` 返回 `{ok,uptime,db}`，`no-store`，不受访问口令限制；Docker `HEALTHCHECK` 用它 | `server.js:314` |
+| 访问门禁 | 回环免口令；非回环未带有效口令一律 401 登录页（不泄露页面内容与 IPC token）；`?access=` 换 HttpOnly Cookie 后 303 去参 | `lib/access-gate.js` |
+| 孤儿恢复 | 启动时 `running/retrying` → `interrupted`（可续跑）、文档项目 → `failed`、评审轮次有意见 → `paused` | `lib/recovery.js` |
+| 优雅退出 | `SIGTERM/SIGINT`：停接新连接，等待在飞请求与任务到边界（`FABULA_SHUTDOWN_GRACE_MS`，默认 10s），再 `closeAllConnections`、关库、exit 0 | `server.js:430` |
+| 迁移安全 | `PRAGMA user_version` 记录 schema 版本；升级前 `VACUUM INTO` 快照（保留 5 份），备份失败拒绝启动 | `lib/db.js:64-100` |
+| 取消任务 | 文档全托管可在小节边界停止，已完成小节保留；无进程内循环时直接改库 | `doc-engine.js` `cancelDocRun` |
+
+对应的回归：`test/access-gate.test.js`、`test/access-gate-server.test.js`（真服务非回环）、`test/recovery.test.js`、`test/migration.test.js`、`test/graceful-shutdown.test.js`（POSIX）。
+
 ---
 
 ## 7. 风险登记册
@@ -336,7 +351,7 @@ SkillManifest {
 | 过早微服务化，把 29.6k 行拆成 8 个服务 | 中 | 高（交付速度腰斩） | P0/P1 明确「单体 + 多 worker」，拆分门槛写在决策门里 |
 | 契约先行但无人使用，变成文档垃圾 | 中 | 中 | 每个契约必须有一个**真实调用方**才算完成；无调用方不进主干 |
 | SQLite→PG 迁移数据不一致 | 中 | 高 | 双写 + 校验脚本 + 只读切换演练；迁移前必须有全量备份与回滚路径 |
-| 评审机制成本失控（3 评审员 × N 轮） | 高 | 中 | `budgetTokens` 硬门禁在 Job 层，不在提示词里「请节约」 |
+| 评审机制成本失控（3 评审员 × N 轮） | 高 | 中 | **已落地**：团级每轮 token 上限按人数切分、过低预算拒绝开跑；Job 层统一硬门禁仍待 `ModelGateway` |
 | `doc-engine.js` 越拆越乱 | 中 | 中 | 只在 Repository 抽层后按「领域/IO」切，不按行数切 |
 | 页面与用例长期不分离 | 高 | 低（慢性） | 新增页面必须 controller/view 分离；老页面随改随拆 |
 
@@ -351,7 +366,7 @@ SkillManifest {
 第 4 步  contracts.js                  ← 五个契约 + 运行时校验
 第 5 步  tenant_id（P1）               ← 加列 + 查询加过滤，可灰度
 第 6 步  works 表（P1）                ← 评审/导出/蒸馏统一入口
-第 7 步  review / skill 域（P2）        ← 已完成（2026-10）；剩余版本回滚与预算门禁
+第 7 步  review / skill 域（P2）        ← 已完成（2026-10）；剩余 Skill 版本回滚
 ```
 
 **每一步都可独立上线、可回滚**。任何一步如果需要「停下来改一个月」，说明这一步切大了，应再拆。
