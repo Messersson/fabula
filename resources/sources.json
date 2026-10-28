@@ -1,0 +1,32 @@
+[
+  {
+    "id": "shukuge",
+    "name": "shukuge.com",
+    "baseUrl": "http://www.shukuge.com/",
+    "charset": "",
+    "search": {
+      "url": "http://www.shukuge.com/Search?wd={{key}}",
+      "item": "div.listitem",
+      "name": ".bookdesc h2",
+      "link": ".bookdesc a",
+      "author": "p.sp span"
+    },
+    "catalog": {
+      "item": "#list dd a",
+      "bookName": "h1",
+      "urlTemplate": "{{url}}/index.html"
+    },
+    "content": {
+      "body": "#content #content",
+      "title": "",
+      "junkLines": [
+        "shukuge",
+        "最新网址",
+        "天才一秒"
+      ]
+    },
+    "enabled": true,
+    "remote": true,
+    "version": 8
+  }
+]

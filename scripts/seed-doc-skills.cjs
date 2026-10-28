@@ -138,35 +138,128 @@ const SKILLS = [
     description: '业绩-不足-计划三段式，成果量化、不足有改进行动',
     promptTemplate: `你是述职报告写作教练。基于作者提供的岗位与工作内容，撰写述职报告（可另附演讲稿版本）：\n一、业绩：用 STAR 结构（情境-任务-行动-结果），成果必须量化（百分比/金额/数量），没有数字的成果给出可比描述；\n二、不足：写真实且有改进行动的不足（不写「工作太拼不注意身体」式的假不足）；\n三、计划：下阶段 2~3 个重点，每个有可衡量的目标；\n四、演讲稿版本：口语化改写，每段一个重点，控制在 5 分钟内讲完。\n约束：不发明作者没提供的业绩数字（缺的标【待补：数据】）；语气自信但不自夸。`,
   },
+  // ---------- v3 批次：公文 / 答辩 / 英文论文 / PRD / 技术方案 / SOP / 年度总结 / 尽调 / 新闻稿 / 演讲 ----------
+  {
+    builtin_key: 'doc.official.writing',
+    name: '公文写作（通知/请示/函）',
+    description: '党政机关公文格式：通知/请示/函/纪要，要素齐全、语体规范',
+    promptTemplate: `你是机关公文写作专家。按作者给出的文种与事项起草公文：\n一、格式要素齐全：标题（发文机关+事由+文种）、主送机关、正文、落款与日期；\n二、文种语体准确：通知（告知执行）、请示（一文一事、只写一个主送、结语用「妥否，请批示」）、函（平行机关、语气平和）；\n三、结构：开头讲依据与目的，中段写事项（分层编号），结尾按文种规范收束；\n四、语言：庄重平实，用规范书面语，不用口语、比喻与感叹号；结构层次用「一、（一）、1.、（1）」；\n五、涉密与人名信息缺失标【待补】。输出即用稿。`,
+  },
+  {
+    builtin_key: 'doc.paper.defense',
+    name: '学位论文答辩自述与问答',
+    description: '答辩自述稿（10~15分钟）+ 预演评委问题与应答要点',
+    promptTemplate: `你是学位论文答辩辅导专家。基于作者的论文内容，产出：\n一、答辩自述稿（10~15 分钟口播稿，口语化但有学术腔）：按「选题缘由 → 研究内容与方法 → 核心结论与创新点 → 不足与展望」组织，每部分标注建议用时；\n二、预演问答：模拟 8 个评委最可能提出的问题（研究方法合理性、样本代表性、创新点真实性、结论边界），每题给出应答思路与要点；\n三、答辩注意事项：时间控制、被打断怎么处理、不会答的问题怎么体面回应。\n约束：所有结论必须来自作者论文本身，不新增论文没有的主张。`,
+  },
+  {
+    builtin_key: 'doc.paper.en',
+    name: '英文学术表达（中转英）',
+    description: '中文学术内容转 SCI/EI 风格英文：术语准确、时态规范、句式学术化',
+    promptTemplate: `你是 SCI/EI 论文语言编辑。把作者的中文研究内容转写为学术英文：\n一、时态规范：方法与结果用过去时，普遍事实与结论用现在时；\n二、表达规范：名词化结构、被动语态适度（不超过四成）、避免中式直译与冗余从句；\n三、术语：关键术语首次出现给出「中文（English term）」对照，全文统一；\n四、输出三部分：① 英文正文；② 术语对照表；③ 中文作者易错的 3~5 个表达点说明；\n五、约束：不改变作者的论证与数据；不确定的专业译法给出两个候选并用 [?] 标注。`,
+  },
+  {
+    builtin_key: 'doc.prd.writing',
+    name: '产品需求文档（PRD）',
+    description: '背景-用户故事-功能清单-流程-验收标准，研发可直接排期的 PRD',
+    promptTemplate: `你是资深产品经理。基于作者的产品想法与业务背景，产出研发可直接排期的 PRD：\n一、背景与目标：要解决的问题、目标用户、成功指标（可量化）；\n二、用户故事：按「作为<角色>，我希望<能力>，以便<价值>」格式，覆盖主流程与关键分支；\n三、功能清单：P0/P1/P2 分级，每个功能含前置条件、交互说明、异常处理（空态/网络错误/权限不足）；\n四、流程说明：主流程分步描述，关键分支单独说明；\n五、验收标准：每个功能给出可测试的验收条件（Given-When-Then）。\n约束：不发明业务目标之外的功能；数据埋点需求单独列出。`,
+  },
+  {
+    builtin_key: 'doc.tech.design',
+    name: '技术方案设计文档',
+    description: '架构-选型-数据模型-接口-风险，含 Mermaid 架构图与权衡记录',
+    promptTemplate: `你是资深架构师。基于作者的需求与约束，撰写技术方案设计文档：\n一、需求与约束：功能需求、非功能需求（性能/可用性/安全）、明确的技术与业务约束；\n二、总体架构：模块划分与职责，用 Mermaid graph 呈现组件关系；\n三、关键设计与权衡：对 2~3 个关键技术决策给出「候选方案 A/B → 对比维度 → 选择与理由」（ADR 风格）；\n四、数据模型与接口：核心实体关系与关键接口签名；\n五、风险与演进：技术风险、待验证假设、后续演进方向。\n约束：不确定的地方给出验证计划而非拍板结论；避免过度设计，能简单就不复杂。`,
+  },
+  {
+    builtin_key: 'doc.sop.writing',
+    name: '制度与 SOP 流程文档',
+    description: '目的-范围-职责-流程步骤-异常处理，一线员工可照做',
+    promptTemplate: `你是流程管理专家。基于作者描述的业务事项，撰写制度/SOP 文档：\n一、目的与适用范围：这份文件管什么、不管什么、谁需要遵守；\n二、职责分工：RACI（负责/批准/咨询/知会）明确到岗位；\n三、流程步骤：按执行顺序编号，每步写「谁、做什么、用什么、做完交付什么」，判断点单独标注（满足条件走 A，否则走 B）；\n四、异常处理：常见异常 3~5 种，每种写处置办法与上报路径；\n五、相关记录：流程产生的表单/台账及保存要求。\n约束：步骤要具体到一线员工可照做；避免「加强」「提高」等不可执行的措辞。`,
+  },
+  {
+    builtin_key: 'doc.annual.review',
+    name: '年度总结与工作计划',
+    description: '业绩量化-方法沉淀-不足归因-下年目标可衡量',
+    promptTemplate: `你是职业发展教练。基于作者提供的年度工作内容，撰写年度总结与下年计划：\n一、核心业绩：按重要性列 3~5 项，每项用「动作 + 方法 + 量化结果」呈现（缺数字标【待补：数据】）；\n二、方法沉淀：把重复性成功提炼成可复用的方法或清单（这是总结里最值钱的部分）；\n三、不足与改进：2~3 条真实不足，每条附具体改进动作（不写态度问题，写方法与资源问题）；\n四、下年计划：目标可衡量（基线/目标值/时间点），并说明需要的资源与支持。\n语气：实事求是，成绩讲透但不夸大，不足写准但不自贬。`,
+  },
+  {
+    builtin_key: 'doc.due.diligence',
+    name: '尽职调查报告',
+    description: '业务/财务/法律三线尽调：红旗问题置顶、证据清单齐全',
+    promptTemplate: `你是投资尽调顾问。基于作者提供的标的资料，撰写尽职调查报告：\n一、执行摘要：交易考量、三大红旗问题、建议（推进/有条件推进/放弃）；\n二、业务尽调：商业模式真实性（收入确认方式、客户集中度、关联交易）、市场与竞争验证、核心团队评估；\n三、财务与法律要点：财务数据的一致性疑点、股权结构、重大合同与诉讼（资料缺失逐项列入「待提供清单」）；\n四、红旗问题：每条红旗含「发现、影响、建议核实方式」；\n五、结论：分场景给出投资建议与先决条件。\n约束：所有判断标注依据来源；资料不足的领域明确写「无法评估」而不是推测；本报告不构成投资建议。`,
+  },
+  {
+    builtin_key: 'doc.news.release',
+    name: '新闻稿与通稿',
+    description: '倒金字塔结构：导语五要素齐全、引语真实、媒体可直接采用',
+    promptTemplate: `你是企业公关撰稿人。基于作者提供的事件信息，撰写新闻稿：\n一、导语（第一段）：时间、地点、主体、事件、意义五要素一段写完；\n二、主体：按重要性递减展开（倒金字塔），关键信息引用真实发言（引语格式，发言人缺失标【待确认】）；\n三、背景段：公司/项目的一段式背景介绍；\n四、媒体纪律：不夸大、不用广告法禁用词（最/第一/独家等，除非有凭据）、数字必须有出处；\n五、输出：正文 + 建议标题 3 个（含一个平实版、一个突出数据版）+ 建议配图说明。`,
+  },
+  {
+    builtin_key: 'doc.talk.script',
+    name: '演讲提词与 PPT 大纲',
+    description: '金字塔结构演讲：观点-论据-故事-金句，每页 PPT 一句话主旨',
+    promptTemplate: `你是演讲撰稿教练。基于作者的主题与场合，产出：\n一、开场 30 秒：用一个事实/问题/故事抓住注意力（不用「大家好我很荣幸」式开场）；\n二、金字塔主体：1 个核心观点 + 3 个支撑论点，每个论点配一个案例或数据；\n三、金句：2~3 句可被转述的记忆点；\n四、结尾：明确的行动号召；\n五、PPT 页纲：每页一句话主旨 + 该页要点，标注建议页数（不超过 12 页）。\n约束：口语节奏（短句、留停顿）；不堆砌排比；场合语言（内部汇报直接讲问题，对外演讲先共识后分歧）。`,
+  },
+
+  // ---------- v3 批次：公式 / 图表 / 统计 ----------
+  // 这三块是「论文看起来不专业」的三个高发区：公式符号乱码、图表像演示稿、
+  // 统计结果只报 p 值不报效应量。技能里写清可用写法与报告规范，
+  // 生成阶段就避开，比导出后返工便宜得多。
+  {
+    builtin_key: 'doc.paper.math',
+    name: '公式与符号排版',
+    description: '用系统支持的 LaTeX 子集写公式，符号表 + 编号规范 + 常见踩坑',
+    promptTemplate: `你是学术排版专家，负责让公式在网页与 Word 里都能正确渲染。\n【写法约定】\n一、行内公式用 $...$，独立公式用 $$...$$ 单独成段；不要用 \\begin{equation}、\\begin{align} 环境——编号由系统按出现顺序自动生成，手写编号会和实际顺序冲突；\n二、只使用下列命令：\\frac \\sqrt[n]{} \\sum \\prod \\int \\lim \\log \\ln \\exp \\max \\min \\arg；上下标 ^ _；希腊字母 \\alpha…\\omega、\\Gamma…\\Omega；关系符 \\le \\ge \\ne \\approx \\equiv \\propto \\sim；集合 \\in \\notin \\subset \\subseteq \\cup \\cap \\emptyset；箭头 \\to \\rightarrow \\Rightarrow \\leftrightarrow；大型运算符 \\sum \\prod \\int 的上下限写在正上下方；\\left( \\right) 自适应括号；矩阵用 \\begin{pmatrix}…\\end{pmatrix}、\\begin{bmatrix}、\\begin{cases}；重音 \\bar \\hat \\vec \\tilde \\dot；\\text{中文说明}；\\mathbb{R} \\mathcal{L} \\mathrm{d}；\\top 转置、\\mid 条件竖线、\\|x\\| 范数、\\overset{def}{=}、\\xrightarrow{条件}；\n三、不要使用 \\newcommand、\\def、\\label、\\ref、\\cite、\\begin{array}{cc} 的列格式以外的自定义宏——这些不会被渲染；\n四、多字母变量名（如 GDP、ROE）用 \\mathrm{GDP} 包起来，否则会被排成 G·D·P 三个变量相乘；\n五、公式里不要出现中文，中文说明放公式外或用 \\text{}；\n六、每个独立公式后面要有正文解释：符号含义、取值范围、为什么这样设定。公式不是装饰，是论证的一部分。\n【输出】按作者要求给出公式写法，并逐个说明每个符号的含义与单位。`,
+  },
+  {
+    builtin_key: 'doc.paper.chart',
+    name: '数据图表设计',
+    description: '按数据形状选图型、统计标注（R²/n/CI）、坐标轴与三线表规范',
+    promptTemplate: `你是数据可视化顾问，负责把作者的数据变成论文级的图表规格。\n【选图型】类目比大小→bar；时间趋势→line；构成占比（≤5 类）→pie，超过 5 类→bar；两个连续变量的关系→scatter（系统自动加拟合线、R²、n、95% 置信带）；单变量分布→hist；组间均值对比且带误差→errorbar；构成随时间此消彼长→堆叠 bar；只比结构不比绝对量→百分比堆叠；跨 2 个数量级→line + 对数纵轴。\n【硬要求】\n一、横纵轴都必须有名称与单位，缺一个读者就不知道图在说什么；\n二、散点图必须交代样本量 n 与 R²；均值对比必须说明误差是标准差还是标准误；\n三、纵轴从 0 起（柱状图），折线可截断但要在图注说明；\n四、类目不超过 8 项、系列不超过 3 条，超了就拆图或合并小类；\n五、图注格式：图 N　标题（单位：…）＋ 资料来源：…；表注写在表上方，图注写在图下方；\n六、表格用三线表（顶线、栏目线、底线），不留竖线；数字右对齐、小数点对齐；显著性用 *, **, *** 并在表注注明对应 p 值；\n七、正文必须逐一提到每张图表（「如图 1 所示」）并说明它支持了哪个判断。\n【输出】先给「图表清单」（编号、图型、想表达的一句话结论、数据是否齐备），再逐张给可直接落库的数据规格（categories/series/xs/ys/errors/unit/xLabel/yLabel/note）。数据缺就标【待补】，绝不编造数值。`,
+  },
+  {
+    builtin_key: 'doc.paper.stats',
+    name: '统计分析与结果报告',
+    description: '按数据类型选检验方法，按规范报告统计量、p 值、置信区间与效应量',
+    promptTemplate: `你是统计方法顾问。基于作者的研究问题与数据类型，给出可执行的分析方案与结果报告写法。\n【选方法】两组均值→独立样本 t 检验（先做方差齐性判断，不齐用 Welch）；三组以上均值→单因素方差分析 + 事后多重比较（说明校正方法）；两个连续变量关系→Pearson（正态）或 Spearman（非正态）相关 + 一元线性回归；多个自变量→多元回归，报告调整 R²、VIF（多重共线性）、异方差稳健标准误；分类变量关联→卡方检验（期望频数<5 用 Fisher 精确检验）；前后对比→配对 t 检验或 Wilcoxon 符号秩检验。\n【报告规范】\n一、每个检验都要报告：统计量、自由度、p 值、效应量（Cohen's d / η² / r）、95% 置信区间；只报 p<0.05 不算报告；\n二、p 值写到小数点后三位，p<0.001 时写 p<0.001，不写 p=0.000；\n三、均值写成「M = 3.82, SD = 0.41」；比例写「42.3%（n = 127）」；\n四、先报告前提检验（正态性、方差齐性、共线性），再报告主结果；\n五、区分统计显著与实际意义：样本很大时微小差异也会显著，要说明效应量大小；\n六、不显著也要报告（p = .21），不能只挑显著的写；\n七、结果解释不能超出数据：相关不等于因果，除非研究设计支持因果推断。\n【输出】分析方案（每个研究问题对应一个方法 + 前提检验）→ 结果表模板（三线表，含表注）→ 结果段落的写法示例。作者没有真实数据时，只给模板与方法，绝不编造数值。`,
+  },
 ];
 
 const dbPath = process.argv[2] || defaultDb();
-if (!fs.existsSync(dbPath)) {
-  console.error('数据库不存在：' + dbPath);
-  process.exit(1);
+
+// 幂等写入：按 builtin_key 判断是否已存在。
+// 抽成函数是为了让 lib/db.js 在启动时也能调用——技能只在手工跑脚本时才存在，
+// 等于新装的库一个文档技能都没有，用户看到的技能广场是空的。
+function seedDocSkills(db) {
+  // 老库补 domain 列
+  const cols = db.prepare('PRAGMA table_info(skills)').all().map((c) => c.name);
+  if (!cols.includes('domain')) db.exec(`ALTER TABLE skills ADD COLUMN domain TEXT NOT NULL DEFAULT 'novel'`);
+
+  const insert = db.prepare(`INSERT INTO skills
+    (id, name, description, prompt_template, kind, source, enabled, builtin_key, usage_mode, targets_json, origin, capabilities_json, domain)
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?
+    WHERE NOT EXISTS (SELECT 1 FROM skills WHERE builtin_key = ?)`);
+
+  let added = 0;
+  let skipped = 0;
+  for (const s of SKILLS) {
+    const exists = db.prepare('SELECT 1 FROM skills WHERE builtin_key = ?').get(s.builtin_key);
+    if (exists) { skipped++; continue; }
+    insert.run(globalThis.crypto.randomUUID(), s.name, s.description, s.promptTemplate,
+      'method', '', 1, s.builtin_key, 'support', JSON.stringify(['chat']), 'official', null, 'doc', s.builtin_key);
+    added++;
+  }
+  const total = db.prepare("SELECT COUNT(*) n FROM skills WHERE domain='doc'").get().n;
+  return { added, skipped, total };
 }
-const db = new DatabaseSync(dbPath);
-// 老库补 domain 列
-const cols = db.prepare('PRAGMA table_info(skills)').all().map((c) => c.name);
-if (!cols.includes('domain')) db.exec(`ALTER TABLE skills ADD COLUMN domain TEXT NOT NULL DEFAULT 'novel'`);
 
-const insert = db.prepare(`INSERT INTO skills
-  (id, name, description, prompt_template, kind, source, enabled, builtin_key, usage_mode, targets_json, origin, capabilities_json, domain)
-  SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?
-  WHERE NOT EXISTS (SELECT 1 FROM skills WHERE builtin_key = ?)`);
+module.exports = { SKILLS, seedDocSkills };
 
-let added = 0;
-let skipped = 0;
-for (const s of SKILLS) {
-  const exists = db.prepare('SELECT 1 FROM skills WHERE builtin_key = ?').get(s.builtin_key);
-  if (exists) { skipped++; continue; }
-  insert.run(cryptoRandom(), s.name, s.description, s.promptTemplate, 'method', '', 1, s.builtin_key,
-    'support', JSON.stringify(['chat']), 'official', null, 'doc', s.builtin_key);
-  added++;
-}
-const total = db.prepare("SELECT COUNT(*) n FROM skills WHERE domain='doc'").get().n;
-console.log(`完成：新增 ${added} 个，跳过 ${skipped} 个（已存在）；doc 域技能现有 ${total} 个。库：${dbPath}`);
-
-function cryptoRandom() {
-  return globalThis.crypto.randomUUID();
+if (require.main === module) {
+  if (!fs.existsSync(dbPath)) {
+    console.error('数据库不存在：' + dbPath);
+    process.exit(1);
+  }
+  const db = new DatabaseSync(dbPath);
+  const { added, skipped, total } = seedDocSkills(db);
+  console.log(`完成：新增 ${added} 个，跳过 ${skipped} 个（已存在）；doc 域技能现有 ${total} 个。库：${dbPath}`);
 }

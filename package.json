@@ -2,6 +2,9 @@
   "name": "fabula-offline",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "test": "node --test"
   }

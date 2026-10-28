@@ -19,7 +19,7 @@ scp fabula.tar.gz admin@192.168.31.180:/vol1/docker/fabula/
 ssh admin@192.168.31.180 "cd /vol1/docker/fabula && tar xzf fabula.tar.gz && mkdir -p data"
 ```
 
-> 首次部署时把 `data/` 目录整体拷贝过去即可带书稿。`prompts.defaults.json` / `sources.json` / `sensitive_words.txt` 是**代码资产**，必须随镜像走（.dockerignore 只排除用户数据）。
+> `data/` 只放用户内容（书稿、素材、导出、渠道配置）。种子库与默认提示词/书源/敏感词已随代码放在 `resources/`，镜像自带，不必再手工拷贝；首次部署即使不挂载 `data/` 也能启动。
 
 ## 二、NAS 上构建与启动
 
@@ -49,7 +49,7 @@ docker run -d --name fabula \
 ## 四、注意事项
 
 1. **Node 版本**：后端用了 `node:sqlite`（Node 22 内置），镜像使用 `node:22-alpine`。
-2. **数据卷**：书稿、回收站、版本历史与书源仍保存在项目的 `data/` 目录。SQLite 运行库位于 Docker 命名卷 `fabula_runtime`，首次启动会从 `data/writerx.db` 导入，避免 Windows 挂载目录导致 SQLite I/O 错误。备份时同时备份 `data/` 和该命名卷。
+2. **数据卷**：书稿、回收站、版本历史与书源仍保存在项目的 `data/` 目录。SQLite 运行库位于 Docker 命名卷 `fabula_runtime`，首次启动会优先从 `data/writerx.db` 导入；没有旧库时使用镜像自带的 `resources/writerx.seed.db` 初始化（含全部官方技能）。备份时同时备份 `data/` 和该命名卷。
 3. **模型渠道**：在 UI「设置→渠道管理」填写你的接口地址、模型列表地址、模型 ID 和 API Key；也可以写进 `config.json` 后重启。
    - 示例：
      ```json

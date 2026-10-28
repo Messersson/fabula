@@ -9,7 +9,8 @@ config.json
 data/
 output/
 ppt_work/
-scripts/
+scripts/*
+!scripts/seed-doc-skills.cjs
 test/
 *.db
 *.db-wal

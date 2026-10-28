@@ -13,3 +13,5 @@ node_modules/
 Thumbs.db
 .playwright-cli/
 .env
+resources/*.db-shm
+resources/*.db-wal

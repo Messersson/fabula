@@ -30,10 +30,13 @@ function loadConfig() {
 }
 
 // ---------- DB ----------
-// 种子库优先：writerx.seed.db（干净初始化库）→ 本机现库兜底（老用户升级场景）
+// 种子库优先：data/writerx.seed.db（本机初始化库）→ data/writerx.db（老用户升级）
+// → resources/writerx.seed.db（随代码分发，干净检出/容器首次启动）。
 const seedDb = fs.existsSync(path.join(ROOT, 'data', 'writerx.seed.db'))
   ? path.join(ROOT, 'data', 'writerx.seed.db')
-  : path.join(ROOT, 'data', 'writerx.db');
+  : (fs.existsSync(path.join(ROOT, 'data', 'writerx.db'))
+    ? path.join(ROOT, 'data', 'writerx.db')
+    : dbmod.BUNDLED_SEED);
 dbmod.open(seedDb);
 const { run, q, one } = require('./lib/db');
 
@@ -232,7 +235,7 @@ async function handleStatusResume(req, res) {
   // 文档任务的续跑走文档引擎（复用同一状态机，但提示词与循环不同）。
   if (run.mode === 'doc') {
     const docEngine = require('./lib/doc-engine');
-    statusPage.startResume(runId, {
+    const started = statusPage.startResume(runId, {
       resume: (id) => docEngine.resumeDocRun(id),
       onSettled: (id, error, result) => {
         resumeOutcomes.set(id, error
@@ -240,12 +243,14 @@ async function handleStatusResume(req, res) {
           : { at: Date.now(), ok: true, message: `续跑结束，新写 ${result?.created?.length || 0} 节` });
       },
     });
-    resumeOutcomes.set(runId, { at: Date.now(), ok: true, message: '已启动，正在续跑…' });
+    resumeOutcomes.set(runId, started
+      ? { at: Date.now(), ok: true, message: '已启动，正在续跑…' }
+      : { at: Date.now(), ok: false, message: '该任务已在运行，不用重复点' });
     res.writeHead(303, { Location: '/status' });
     res.end();
     return;
   }
-  statusPage.startResume(runId, {
+  const started = statusPage.startResume(runId, {
     resume: (id) => require('./lib/handlers-misc').resumeGenerationRun({ runId: id }),
     onSettled: (id, error, result) => {
       resumeOutcomes.set(id, error
@@ -253,7 +258,9 @@ async function handleStatusResume(req, res) {
         : { at: Date.now(), ok: true, message: `续跑结束，新建 ${result?.created?.length || 0} 章` });
     },
   });
-  resumeOutcomes.set(runId, { at: Date.now(), ok: true, message: '已启动，正在续跑…' });
+  resumeOutcomes.set(runId, started
+    ? { at: Date.now(), ok: true, message: '已启动，正在续跑…' }
+    : { at: Date.now(), ok: false, message: '该任务已在运行，不用重复点' });
   res.writeHead(303, { Location: '/status' });
   res.end();
 }
@@ -309,6 +316,17 @@ const server = http.createServer((req, res) => {
       .catch((error) => {
         console.log('[skills] ERR', error && error.message);
         if (!res.writableEnded) { res.writeHead(500); res.end('skills error'); }
+      });
+    return;
+  }
+  // AI 评审机制：多厂商评审团、评审库与轮次记录。与工作台平行，读写它们的数据。
+  if (u.pathname === '/review' || u.pathname.startsWith('/review/')) {
+    const reviewPage = require('./lib/review-page');
+    reviewPage.handleReview(req, res, u.pathname, IPC_TOKEN)
+      .then((handled) => { if (!handled && !res.writableEnded) serveStatic(req, res, u.pathname); })
+      .catch((error) => {
+        console.log('[review] ERR', error && error.message);
+        if (!res.writableEnded) { res.writeHead(500); res.end('review error'); }
       });
     return;
   }
