@@ -249,10 +249,16 @@
 
   workspaceTabs = readWorkspaceTabs();
 
+  const ipcHeaders = () => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (window.__WX_IPC_TOKEN__) headers['X-Fabula-Token'] = window.__WX_IPC_TOKEN__;
+    return headers;
+  };
+
   const ipc = async (command, args) => {
     const response = await fetch(`/ipc/${command}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: ipcHeaders(),
       body: JSON.stringify({ args }),
     });
     const lines = (await response.text()).trim().split(/\r?\n/).filter(Boolean);
@@ -264,7 +270,7 @@
   const ipcStream = async (command, args, onEvent) => {
     const response = await fetch(`/ipc/${command}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: ipcHeaders(),
       body: JSON.stringify({ args }),
     });
     if (!response.body) return ipc(command, args);

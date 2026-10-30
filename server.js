@@ -131,7 +131,10 @@ function serveStatic(req, res, pathname) {
     let html = fs.readFileSync(fp, 'utf-8');
     // 构建时间戳：客户端检测到变化自动强刷一次（对抗无视 no-store 的浏览器缓存）
     const buildTs = String(Math.min(fs.statSync(fp).mtimeMs, Date.now()));
-    const inject = `<script>window.__WX_BUILD__="${buildTs}";window.__WX_IPC_TOKEN__="${IPC_TOKEN}";${glue()}</script>`;
+    // 进程重启后 IPC token 会变，旧标签页的 header 立刻失效；把 token 前缀混进构建戳，
+    // 让已打开的页面在下次请求前自动强刷一次，而不是弹一串 403。
+    const buildKey = `${buildTs}-${IPC_TOKEN.slice(0, 8)}`;
+    const inject = `<script>window.__WX_BUILD__="${buildKey}";window.__WX_IPC_TOKEN__="${IPC_TOKEN}";${glue()}</script>`;
     if (!html.includes('__WRITERX_GLUE__')) {
       html = html.replace(/<head>/i, '<head>' + inject).replace(/<!doctype html>/i, (m) => m + inject);
     }

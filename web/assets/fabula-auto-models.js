@@ -4,10 +4,16 @@
   let settings = null;
   let loading = null;
 
+  const ipcHeaders = () => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (window.__WX_IPC_TOKEN__) headers['X-Fabula-Token'] = window.__WX_IPC_TOKEN__;
+    return headers;
+  };
+
   const ipc = async (command, args) => {
     const response = await fetch(`/ipc/${command}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: ipcHeaders(),
       body: JSON.stringify({ args }),
     });
     const lines = (await response.text()).trim().split(/\r?\n/).filter(Boolean);
