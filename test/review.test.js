@@ -764,7 +764,131 @@ test('自动评审（小说）：开启且配了默认团时新章自动过一�
   review.setEnabled({ enabled: false });
 });
 
+test('自动评审（小说）：按文件名解析章号定位，缺章不串章；自动评审有显式上限', async () => {
+  const core = require('../lib/handlers-core');
+  const book = core.createBook({ title: '章号映射小说' });
+  const files = [
+    [1, '第一章正文标记'], [2, '第二章正文标记'], [3, '第三章正文标记'],
+    [10, '第十章正文标记'], [12, '第十二章正文标记'],
+  ];
+  for (const [n, marker] of files) {
+    core.writeFileTo({
+      bookId: book.id, group: '正文', name: `第${n}章 标题.md`,
+      content: `${marker}。${'后续正文。'.repeat(40)}`,
+    });
+  }
+  const panel = review.savePanel({
+    name: '章号映射团', workbench: 'novel',
+    reviewers: [{ name: '编辑', channelId: 'ch_a', persona: '网文编辑' }],
+  });
+  const prompts = [];
+  stubModel((options) => {
+    prompts.push(String(options.messages?.[1]?.content || ''));
+    return JSON.stringify({
+      score: 70, grade: 'B', summary: '可用。', highlights: [],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  review.setEnabled({ enabled: true });
+  try {
+    const result = await review.autoReviewNovelChapters({ bookId: book.id, idxs: [1, 2, 3, 10, 12] });
+    assert.equal(result.skipped, false);
+    assert.equal(result.requested, 5);
+    assert.equal(result.reviewed, 5);
+    assert.equal(result.capped, false);
+    const at = (n) => result.sections.find((item) => item.idx === n);
+    assert.equal(at(1).sectionIdx, 1);
+    // 第10章是排序后的第 4 个正文文件：章号与序号不相等时不能拿章号当序号
+    assert.equal(at(10).sectionIdx, 4);
+    assert.equal(at(12).sectionIdx, 5);
+    assert.match(at(10).title, /第10章/);
+    assert.match(at(12).title, /第12章/);
+    const prompt10 = prompts.find((text) => text.includes('第十章正文标记'));
+    assert.ok(prompt10, '第十章正文要真的送进提示词');
+    assert.match(prompt10, /第10章/, '送评对象必须是第10章');
+    assert.doesNotMatch(prompt10, /第12章/, '不能把别的章送进第10章的评审');
 
+    // 自动评审有上限：超过上限的部分不静默丢弃，返回值要能告诉作者
+    const capped = await review.autoReviewNovelChapters({
+      bookId: book.id, idxs: [1, 1, 2, 3, 10, 12], maxItems: 2,
+    });
+    assert.equal(capped.requested, 5, '重复章号只算一次');
+    assert.equal(capped.maxItems, 2);
+    assert.equal(capped.capped, true);
+    assert.equal(capped.sections.length, 2);
+    assert.equal(capped.sections[0].idx, 1);
+    assert.equal(capped.sections[1].idx, 2);
+
+    // 章号找不到正文文件：明确报错，而不是退回「取第 N 个」串到别的章
+    const missing = await review.autoReviewNovelChapters({ bookId: book.id, idxs: [7] });
+    assert.equal(missing.reviewed, 0);
+    assert.equal(missing.sections.length, 1);
+    assert.match(missing.sections[0].error, /找不到第7章/);
+  } finally {
+    restoreModel();
+    review.deletePanel(panel.id);
+    review.setEnabled({ enabled: false });
+  }
+});
+
+test('长稿评审：报告与页面都标明只覆盖了前 24000 字', async () => {
+  const project = makeDoc();
+  const tail = '结尾标记XYZ';
+  const text = `${'甲'.repeat(24000)}${tail}`;
+  docEngine.saveSectionContent(project.id, 1, text, 'manual');
+  const panel = review.savePanel({
+    name: '覆盖范围团', workbench: 'doc',
+    reviewers: [{ name: '审稿人甲', channelId: 'ch_a', modelLabel: '厂商甲 / 模型 X' }],
+  });
+  const prompts = [];
+  stubModel((options) => {
+    prompts.push(String(options.messages?.[1]?.content || ''));
+    return JSON.stringify({
+      score: 70, grade: 'B', summary: '大方向可用。', highlights: [],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  const round = await review.runRound({ workbench: 'doc', workId: project.id, sectionIdx: 1, panelId: panel.id });
+  restoreModel();
+  assert.equal(round.report.coverage.truncated, true);
+  assert.equal(round.report.coverage.totalChars, text.length);
+  assert.equal(round.report.coverage.reviewedChars, 24000);
+  assert.equal(round.report.coverage.limit, 24000);
+  assert.ok(!prompts.some((item) => item.includes(tail)), '超出上限的尾部不能被当成已评审');
+
+  const page = await get(`/review?round=${encodeURIComponent(round.roundId)}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /只覆盖了正文前 24000 字/);
+  assert.match(page.text, /全文 24007 字/);
+  review.deletePanel(panel.id);
+});
+
+test('长稿落改：超过单次上限时拒绝整篇重写，轮次保留且原稿不动', async () => {
+  const core = require('../lib/handlers-core');
+  const book = core.createBook({ title: '长章落改' });
+  const longText = '长章正文内容。'.repeat(900);
+  core.writeFileTo({ bookId: book.id, group: '正文', name: '第1章 长章.md', content: longText });
+  const panel = review.savePanel({
+    name: '长章团', workbench: 'novel',
+    reviewers: [{ name: '编辑', channelId: 'ch_a', persona: '网文编辑' }],
+  });
+  stubModel(() => JSON.stringify({
+    score: 60, grade: 'C', summary: '需要修改。', highlights: [],
+    issues: [{ severity: 'major', dimension: '节奏', text: '节奏拖沓', where: '通篇' }],
+    suggestions: [], priority: [], focus: [],
+  }));
+  const result = await review.runRound({
+    workbench: 'novel', workId: book.id, sectionIdx: 1, target: 'chapter', panelId: panel.id, apply: true,
+  });
+  restoreModel();
+  assert.equal(result.ok, true, '落改失败不能把已经拿到的评审意见一起丢掉');
+  assert.equal(result.report.applied.applied, false);
+  assert.match(result.report.applied.reason, /上限 6000/);
+  assert.equal(review.getRound(result.roundId).afterText, '');
+  const fresh = core.readFileFrom({ bookId: book.id, group: '正文', name: '第1章 长章.md' });
+  assert.equal(fresh, longText, '拒绝落改时原文一个字都不能动');
+  review.deletePanel(panel.id);
+});
 
 test('自动评审：开启后新写小节自动过一轮，但只出意见、不自动改稿', async () => {
   review.setEnabled({ enabled: false });

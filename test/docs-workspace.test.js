@@ -313,6 +313,75 @@ test('AI 共创：起草、按指示修改、手工保存', async () => {
   assert.equal(fresh.sections[1].status, 'done');
 });
 
+test('共创修改：超过单次整节修改上限时明确拒绝，原文不动', async () => {
+  const project = docEngine.createProject({ title: '超长修改', docType: 'paper', mode: 'co' });
+  const longText = '甲'.repeat(7000);
+  docEngine.saveSectionContent(project.id, 1, longText, 'manual');
+  let calls = 0;
+  stubModel(() => { calls += 1; return '乙'.repeat(7000); });
+  await assert.rejects(
+    () => docEngine.reviseSection(project.id, 1, '整体更简洁'),
+    /超过单次整节修改上限 6000 字/,
+  );
+  restoreModel();
+  assert.equal(calls, 0, '超长时不应调用模型再截断');
+  assert.equal(docEngine.getProject(project.id).sections[0].content, longText);
+});
+
+test('共创修改：当前稿完整进提示词；返回稿不足原文 85% 时放弃保存', async () => {
+  const project = docEngine.createProject({ title: '修改稿门禁', docType: 'paper', mode: 'co' });
+  const source = `开头。${'中间内容。'.repeat(300)}结尾标记XYZ`;
+  docEngine.saveSectionContent(project.id, 1, source, 'manual');
+  const prompts = [];
+  stubModel((options) => {
+    prompts.push(String(options.messages?.[1]?.content || ''));
+    return '短稿。'.repeat(10);
+  });
+  await assert.rejects(
+    () => docEngine.reviseSection(project.id, 1, '压缩一下'),
+    /不足原文 .* 字的 85%/,
+  );
+  restoreModel();
+  assert.ok(prompts.length >= 1);
+  assert.ok(prompts.every((text) => text.includes('结尾标记XYZ')), '当前稿必须完整交给模型，不能截掉后半段');
+  assert.equal(docEngine.getProject(project.id).sections[0].content, source, '不合格的短稿不能覆盖原文');
+
+  // 合格稿：整节保存，尾部不能丢
+  stubModel(() => `${source}（已修改）`);
+  const result = await docEngine.reviseSection(project.id, 1, '补一句结论');
+  restoreModel();
+  const fresh = docEngine.getProject(project.id).sections[0].content;
+  assert.equal(result.ok, true);
+  assert.ok(fresh.includes('结尾标记XYZ'));
+  assert.ok(fresh.endsWith('（已修改）'));
+});
+
+test('评审兜底重写：超长小节不做整节重写，避免截断后抹掉后半段', async () => {
+  const project = docEngine.createProject({ title: '超长兜底', docType: 'paper', mode: 'auto', depth: 'brief' });
+  const source = `${'超长小节内容。'.repeat(1050)}结尾标记XYZ`;
+  docEngine.saveSectionContent(project.id, 1, source, 'manual');
+  const prompts = [];
+  stubModel((options) => {
+    const sys = String(options.messages?.[0]?.content || '');
+    const user = String(options.messages?.[1]?.content || '');
+    prompts.push(user);
+    if (sys.includes('审稿人')) {
+      return JSON.stringify({
+        scores: { argument: 8, evidence: 8, structure: 10, terminology: 10, substance: 8, citation: 10 },
+        total: 52, issues: ['太长'], mustFix: ['压缩'],
+        patches: [{ quote: '原文里不存在的句子。', issue: 'x', replacement: 'y' }],
+        unanswered: [],
+      });
+    }
+    return '不应该发生的整节重写。';
+  });
+  const fixed = await docEngine.reviewAndFix(docEngine.getProject(project.id), 1, source, { threshold: 70 });
+  restoreModel();
+  assert.equal(fixed.content, source, '超过上限时应保留原稿');
+  assert.equal(fixed.revised, false);
+  assert.ok(!prompts.some((text) => text.includes('【当前稿】')), '不应把截断后的稿件送去整节重写');
+});
+
 test('AI 共创：空内容与未配置渠道的失败路径', async () => {
   const project = docEngine.createProject({ title: '共创失败路径', docType: 'report', mode: 'co' });
   stubModel(() => '太短');
