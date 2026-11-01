@@ -961,6 +961,39 @@ test('自动评审：总预算不足一轮时不开跑，并报告已花与未�
   }
 });
 
+test('自动评审：总预算要连仲裁与可行性评估一起预留，只够评审员的一轮同样不开跑', async () => {
+  review.setEnabled({ enabled: true, workbench: 'doc' });
+  const project = docEngine.createProject({ title: '裁决预算稿', docType: 'report', mode: 'auto' });
+  docEngine.saveSectionContent(project.id, 1, '第一节正文。', 'manual');
+  // 3 位评审员 × 3000 = 9000，正好用完这份额度；但一轮还有组长仲裁与可行性评估两笔固定开销，
+  // 闸门必须连它们一起拦下来，否则最后一轮会在裁决阶段悄悄超预算。
+  const panel = makePanel({ name: '裁决预算团' });
+  let calls = 0;
+  stubModel(() => {
+    calls += 1;
+    return JSON.stringify({
+      score: 70, grade: 'B', summary: '可用。', highlights: [],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  try {
+    const result = await review.autoReviewSections({ projectId: project.id, idxs: [1], maxTokens: 9000 });
+    assert.equal(result.budgetExhausted, true);
+    assert.equal(result.sections.length, 0, '仲裁与可行性评估没算进预留时，这一轮会在裁决阶段超支');
+    assert.equal(result.notRun, 1);
+    assert.equal(calls, 0, '开跑前的闸门必须连整轮开销一起看');
+    // 留出裁决的额度以后，同一份稿子就能跑起来
+    const enough = await review.autoReviewSections({ projectId: project.id, idxs: [1], maxTokens: 12000 });
+    assert.equal(enough.budgetExhausted, false);
+    assert.equal(enough.sections.length, 1);
+  } finally {
+    restoreModel();
+    review.setAutoReviewBudget(0);
+    review.deletePanel(panel.id);
+    review.setEnabled({ enabled: false });
+  }
+});
+
 test('自动评审：收到停止信号后在两轮之间收手，剩余小节不再送评', async () => {
   review.setEnabled({ enabled: true, workbench: 'doc' });
   const project = docEngine.createProject({ title: '自动评审取消稿', docType: 'report', mode: 'auto' });
