@@ -924,6 +924,105 @@ test('自动评审：开启后新写小节自动过一轮，但只出意见、�
   review.setEnabled({ enabled: false });
 });
 
+test('自动评审：总预算不足一轮时不开跑，并报告已花与未送评数量', async () => {
+  review.setEnabled({ enabled: true, workbench: 'doc' });
+  const project = docEngine.createProject({ title: '预算稿', docType: 'report', mode: 'auto' });
+  docEngine.saveSectionContent(project.id, 1, '第一节正文。', 'manual');
+  docEngine.saveSectionContent(project.id, 2, '第二节正文。', 'manual');
+  const panel = makePanel({ name: '预算团' });
+  let calls = 0;
+  stubModel(() => {
+    calls += 1;
+    return JSON.stringify({
+      score: 70, grade: 'B', summary: '可用。', highlights: [],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  try {
+    const result = await review.autoReviewSections({ projectId: project.id, idxs: [1, 2], maxTokens: 100 });
+    assert.equal(result.budgetExhausted, true);
+    assert.equal(result.tokenBudget, 100);
+    assert.equal(result.tokensUsed, 0);
+    assert.equal(result.sections.length, 0, '预算不够一轮时一节都不应该跑');
+    assert.equal(result.notRun, 2);
+    assert.equal(calls, 0, '预算检查必须在调用之前，而不是花超了再停');
+    // 页面要能配置并回显这份额度
+    const saved = await post('/review/budget', { csrf: TOKEN, workbench: 'doc', autoBudget: '50000' });
+    assert.equal(saved.status, 303);
+    assert.equal(review.autoReviewBudget(), 50000);
+    const page = await get('/review?workbench=doc');
+    assert.match(page.text, /name="autoBudget" value="50000"/);
+    assert.match(page.text, /自动评审总预算/);
+  } finally {
+    restoreModel();
+    review.setAutoReviewBudget(0);
+    review.deletePanel(panel.id);
+    review.setEnabled({ enabled: false });
+  }
+});
+
+test('自动评审：收到停止信号后在两轮之间收手，剩余小节不再送评', async () => {
+  review.setEnabled({ enabled: true, workbench: 'doc' });
+  const project = docEngine.createProject({ title: '自动评审取消稿', docType: 'report', mode: 'auto' });
+  docEngine.saveSectionContent(project.id, 1, '第一节正文。', 'manual');
+  docEngine.saveSectionContent(project.id, 2, '第二节正文。', 'manual');
+  const panel = review.savePanel({
+    name: '自动取消团', workbench: 'doc',
+    reviewers: [{ name: '审稿人甲', channelId: 'ch_a' }],
+  });
+  let calls = 0;
+  stubModel(() => {
+    calls += 1;
+    return JSON.stringify({
+      score: 70, grade: 'B', summary: '可用。', highlights: [],
+      issues: [], suggestions: [], priority: [], focus: [],
+    });
+  });
+  try {
+    const result = await review.autoReviewSections({
+      projectId: project.id, idxs: [1, 2],
+      // 第一轮已经产生调用后返回 true：模拟作者在自动评审期间点「停止」。
+      shouldStop: () => calls >= 1,
+    });
+    assert.equal(result.cancelled, true);
+    assert.equal(result.sections.length, 1, '已开始的这一轮要跑完，但不能继续下一轮');
+    assert.equal(result.notRun, 1);
+    assert.equal(review.listRounds({ workbench: 'doc', workId: project.id, sectionIdx: 2 }).length, 0);
+  } finally {
+    restoreModel();
+    review.deletePanel(panel.id);
+    review.setEnabled({ enabled: false });
+  }
+});
+
+test('评审落改可恢复到修改前：正文未再变时才允许，恢复后不能再恢复一次', async () => {
+  const project = makeDoc('改后正文。');
+  const roundId = 'rd_test_restore_a';
+  db.run(`INSERT INTO review_rounds(id,workbench,work_id,section_idx,target,panel_id,round_no,version,status,created_at,before_text,after_text)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    roundId, 'doc', project.id, 1, 'section', '', 1, 'v1', 'done', Date.now(), '改前正文。', '改后正文。');
+
+  const page = await get(`/review?round=${roundId}`);
+  assert.match(page.text, /恢复到修改前/);
+
+  const res = await post('/review/restore', { csrf: TOKEN, roundId });
+  assert.equal(res.status, 303);
+  assert.equal(docEngine.getProject(project.id).sections[0].content, '改前正文。');
+  assert.ok(review.getRound(roundId).restoredAt > 0);
+  // 恢复前的正文留在版本历史里，恢复本身也能撤回
+  assert.equal(docEngine.listSectionVersions(project.id, 1)[0].chars, '改后正文。'.length);
+  assert.throws(() => review.restoreWork({ roundId }), /已经恢复过/);
+
+  // 正文在这一轮之后又被改过：拒绝恢复，避免覆盖更新的内容
+  const project2 = makeDoc('后来又改过的正文。');
+  const staleId = 'rd_test_restore_b';
+  db.run(`INSERT INTO review_rounds(id,workbench,work_id,section_idx,target,panel_id,round_no,version,status,created_at,before_text,after_text)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    staleId, 'doc', project2.id, 1, 'section', '', 1, 'v1', 'done', Date.now(), '更早的正文。', '这一轮改后的正文。');
+  assert.throws(() => review.restoreWork({ roundId: staleId }), /之后又被修改过/);
+  assert.equal(docEngine.getProject(project2.id).sections[0].content, '后来又改过的正文。');
+});
+
 // ---------- 规范里此前漏掉的五项 ----------
 
 test('可行性评估：与作者意图冲突的意见判为不采纳，并写明理由', async () => {

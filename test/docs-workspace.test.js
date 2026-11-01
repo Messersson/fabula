@@ -4350,3 +4350,41 @@ test('全托管：手动停止在下一节边界生效，已完成小节保留',
   assert.equal(orch.getRun(result.runId).status, 'cancelled');
   assert.equal(docEngine.getProject(project.id).status, 'cancelled');
 });
+
+test('版本历史：覆盖保存留旧版，可恢复到任一版且恢复本身可撤回', async () => {
+  const project = docEngine.createProject({ title: '版本历史稿', docType: 'report', mode: 'co' });
+  docEngine.saveSectionContent(project.id, 1, '第一版正文。', 'ai-draft');
+  docEngine.saveSectionContent(project.id, 1, '第二版正文。', 'ai-polish');
+
+  const versions = docEngine.listSectionVersions(project.id, 1);
+  assert.equal(versions.length, 1, '首次覆盖只留一版旧正文');
+  assert.equal(versions[0].source, 'ai-draft', '版本记录的是旧正文的来源');
+  assert.equal(versions[0].chars, '第一版正文。'.length);
+
+  const page = await get(`/docs?id=${project.id}&s=1`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /版本历史/);
+  assert.match(page.text, /恢复到这一版/);
+
+  const res = await post('/docs/section/restore', {
+    csrf: TOKEN, projectId: project.id, idx: 1, versionId: versions[0].id,
+  });
+  assert.equal(res.status, 303);
+  assert.equal(docEngine.getProject(project.id).sections[0].content, '第一版正文。');
+  const after = docEngine.listSectionVersions(project.id, 1);
+  assert.equal(after.length, 2, '恢复前的第二版也要留档，恢复可以再撤回');
+  assert.equal(after[0].source, 'ai-polish');
+
+  // 再恢复回第二版
+  docEngine.restoreSectionVersion(project.id, 1, after[0].id);
+  assert.equal(docEngine.getProject(project.id).sections[0].content, '第二版正文。');
+
+  // 内容没变的保存不产生噪声版本
+  const before = docEngine.listSectionVersions(project.id, 1).length;
+  docEngine.saveSectionContent(project.id, 1, '第二版正文。', 'manual');
+  assert.equal(docEngine.listSectionVersions(project.id, 1).length, before);
+
+  // 删除项目时版本一并清理
+  docEngine.deleteProject(project.id);
+  assert.equal(docEngine.listSectionVersions(project.id, 1).length, 0);
+});
